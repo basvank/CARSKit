@@ -336,12 +336,12 @@ public class CARSKit {
     /**
      * print out the evaluation information for a specific algorithm
      */
-    private void printEvalInfo(Recommender algo, Map<Measure, Double> ms) throws Exception {
+    private void printEvalInfo(Recommender algo, Map<Measure, Double[]> ms) throws Exception {
 
         String result = Recommender.getEvalInfo(ms);
         // we add quota symbol to indicate the textual format of time
-        String time = String.format("'%s','%s'", Dates.parse(ms.get(Measure.TrainTime).longValue()),
-                Dates.parse(ms.get(Measure.TestTime).longValue()));
+        String time = String.format("'%s','%s'", Dates.parse(ms.get(Measure.TrainTime)[0].longValue()),
+                Dates.parse(ms.get(Measure.TestTime)[0].longValue()));
         // double commas as the separation of results and configuration
         String evalInfo = String.format("Final Results by %s, %s, %s, Time: %s%s", algo.algoName, result, algo.toString(), time,
                 (outputOptions.contains("--measures-only") ? "" : "\n"));
@@ -389,13 +389,23 @@ public class CARSKit {
                 t.join();
 
         // average performance of k-fold
-        Map<Measure, Double> avgMeasure = new HashMap<>();
+        Map<Measure, Double[]> avgMeasure = new HashMap<>();
         for (Recommender algo : algos) {
             //Logs.info("Measures: "+algo.measures.entrySet().size());
-            for (Entry<Measure, Double> en : algo.measures.entrySet()) {
+            for (Entry<Measure, Double[]> en : algo.measures.entrySet()) {
                 Measure m = en.getKey();
-                double val = avgMeasure.containsKey(m) ? avgMeasure.get(m) : 0.0;
-                avgMeasure.put(m, val + en.getValue() / kFold);
+                if (m == Measure.Pre || m == Measure.Rec) {
+                    Double[] vals = new Double[en.getValue().length];
+                    Arrays.fill(vals, new Double(0.0));
+                    if (avgMeasure.containsKey(m)) vals = avgMeasure.get(m);
+                    for (int i=0; i<vals.length; i++) {
+                        vals[i] = vals[i] + (en.getValue()[i] / kFold);
+                    }
+                    avgMeasure.put(m, vals);
+                } else {
+                    double val = avgMeasure.containsKey(m) ? avgMeasure.get(m)[0] : 0.0;
+                    avgMeasure.put(m, new Double[]{val + en.getValue()[0] / kFold});
+                }
             }
         }
 

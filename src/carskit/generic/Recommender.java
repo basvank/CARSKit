@@ -156,7 +156,7 @@ public abstract class Recommender implements Runnable{
     protected SymmMatrix corrs;
 
     // performance measures
-    public Map<Measure, Double> measures;
+    public Map<Measure, Double[]> measures;
     // global average of training rates
     protected double globalMean;
 
@@ -168,7 +168,7 @@ public abstract class Recommender implements Runnable{
         /* prediction-based measures */
         MAE, RMSE, NMAE, rMAE, rRMSE, MPE, Perplexity,
         /* ranking-based measures */
-        D5, D10, Pre5, Pre10, Rec5, Rec10, MAP, MRR, NDCG, AUC,
+        D5, D10, Pre, Pre5, Pre10, Rec, Rec5, Rec10, MAP, MRR, NDCG, AUC,
         /* execution time */
         TrainTime, TestTime,
         /* loss value */
@@ -349,12 +349,12 @@ public abstract class Recommender implements Runnable{
         long testTime = sw.elapsed(TimeUnit.MILLISECONDS) - trainTime;
 
         // collecting results
-        measures.put(Measure.TrainTime, (double) trainTime);
-        measures.put(Measure.TestTime, (double) testTime);
+        measures.put(Measure.TrainTime, new Double[] { (double) trainTime });
+        measures.put(Measure.TestTime, new Double[] { (double) testTime } );
 
         String evalInfo = algoName + foldInfo + ": " + measurements + "\tTime: "
-                + Dates.parse(measures.get(Measure.TrainTime).longValue()) + ", "
-                + Dates.parse(measures.get(Measure.TestTime).longValue());
+                + Dates.parse(measures.get(Measure.TrainTime)[0].longValue()) + ", "
+                + Dates.parse(measures.get(Measure.TestTime)[0].longValue());
         if (!isRankingPred)
             evalInfo += "\tView: " + view;
 
@@ -434,29 +434,30 @@ public abstract class Recommender implements Runnable{
     /**
      * @return the evaluation information of a recommend
      */
-    public static String getEvalInfo(Map<Measure, Double> measures) {
+    public static String getEvalInfo(Map<Measure, Double[]> measures) {
         String evalInfo = null;
         if (isRankingPred) {
             if (isDiverseUsed)
-                evalInfo = String.format("Pre5: %.6f,Pre10: %.6f, Rec5: %.6f, Rec10: %.6f, AUC: %.6f, MAP: %.6f, NDCG: %.6f, MRR: %.6f, D5: %.6f, D10: %.6f",
-                        measures.get(Measure.Pre5), measures.get(Measure.Pre10), measures.get(Measure.Rec5),
-                        measures.get(Measure.Rec10), measures.get(Measure.AUC), measures.get(Measure.MAP),
-                        measures.get(Measure.NDCG), measures.get(Measure.MRR), measures.get(Measure.D5),
-                        measures.get(Measure.D10));
+                evalInfo = String.format("Pre5: %.6f, Pre10: %.6f, Rec5: %.6f, Rec10: %.6f, AUC: %.6f, MAP: %.6f, NDCG: %.6f, MRR: %.6f, D5: %.6f, D10: %.6f, Pre: %s, Rec: %s",
+                        measures.get(Measure.Pre5)[0], measures.get(Measure.Pre10)[0], measures.get(Measure.Rec5)[0],
+                        measures.get(Measure.Rec10)[0], measures.get(Measure.AUC)[0], measures.get(Measure.MAP)[0],
+                        measures.get(Measure.NDCG)[0], measures.get(Measure.MRR)[0], measures.get(Measure.D5)[0],
+                        measures.get(Measure.D10)[0], Arrays.toString(measures.get(Measure.Pre)), Arrays.toString(measures.get(Measure.Rec)));
             else
-                evalInfo = String.format("Pre5: %.6f,Pre10: %.6f, Rec5: %.6f, Rec10: %.6f, AUC: %.6f, MAP: %.6f, NDCG: %.6f, MRR: %.6f", measures.get(Measure.Pre5),
-                        measures.get(Measure.Pre10), measures.get(Measure.Rec5), measures.get(Measure.Rec10),
-                        measures.get(Measure.AUC), measures.get(Measure.MAP), measures.get(Measure.NDCG),
-                        measures.get(Measure.MRR));
+                evalInfo = String.format("Pre5: %.6f, Pre10: %.6f, Rec5: %.6f, Rec10: %.6f, AUC: %.6f, MAP: %.6f, NDCG: %.6f, MRR: %.6f, Pre: %s, Rec: %s",
+                        measures.get(Measure.Pre5)[0],
+                        measures.get(Measure.Pre10)[0], measures.get(Measure.Rec5)[0], measures.get(Measure.Rec10)[0],
+                        measures.get(Measure.AUC)[0], measures.get(Measure.MAP)[0], measures.get(Measure.NDCG)[0],
+                        measures.get(Measure.MRR)[0], Arrays.toString(measures.get(Measure.Pre)), Arrays.toString(measures.get(Measure.Rec)));
 
         } else {
-            evalInfo = String.format("MAE: %.6f, RMSE: %.6f, NAME: %.6f, rMAE: %.6f, rRMSE: %.6f, MPE: %.6f", measures.get(Measure.MAE),
-                    measures.get(Measure.RMSE), measures.get(Measure.NMAE), measures.get(Measure.rMAE),
-                    measures.get(Measure.rRMSE), measures.get(Measure.MPE));
+            evalInfo = String.format("MAE: %.6f, RMSE: %.6f, NAME: %.6f, rMAE: %.6f, rRMSE: %.6f, MPE: %.6f", measures.get(Measure.MAE)[0],
+                    measures.get(Measure.RMSE)[0], measures.get(Measure.NMAE)[0], measures.get(Measure.rMAE)[0],
+                    measures.get(Measure.rRMSE)[0], measures.get(Measure.MPE)[0]);
 
             // for some graphic models
             if (measures.containsKey(Measure.Perplexity)) {
-                evalInfo += String.format(",%.6f", measures.get(Measure.Perplexity));
+                evalInfo += String.format(",%.6f", measures.get(Measure.Perplexity)[0]);
             }
         }
 
@@ -466,7 +467,7 @@ public abstract class Recommender implements Runnable{
     /**
      * @return the evaluation results of rating predictions
      */
-    protected Map<Measure, Double> evalRatings() throws Exception {
+    protected Map<Measure, Double[]> evalRatings() throws Exception {
 
         List<String> preds = null;
         String toFile = null;
@@ -532,22 +533,22 @@ public abstract class Recommender implements Runnable{
         double r_mae = sum_r_maes / numCount;
         double r_rmse = Math.sqrt(sum_r_rmses / numCount);
 
-        Map<Measure, Double> measures = new HashMap<>();
-        measures.put(Measure.MAE, mae);
+        Map<Measure, Double[]> measures = new HashMap<>();
+        measures.put(Measure.MAE, new Double[] { mae });
         // normalized MAE: useful for direct comparison among different data sets with distinct rating scales
-        measures.put(Measure.NMAE, mae / (maxRate - minRate));
-        measures.put(Measure.RMSE, rmse);
+        measures.put(Measure.NMAE, new Double[] { mae / (maxRate - minRate) });
+        measures.put(Measure.RMSE, new Double[] { rmse });
 
         // MAE and RMSE after rounding predictions to the closest rating levels
-        measures.put(Measure.rMAE, r_mae);
-        measures.put(Measure.rRMSE, r_rmse);
+        measures.put(Measure.rMAE, new Double[] { r_mae });
+        measures.put(Measure.rRMSE, new Double[] { r_rmse });
 
         // measure zero-one loss
-        measures.put(Measure.MPE, (numPEs + 0.0) / numCount);
+        measures.put(Measure.MPE, new Double[] { (numPEs + 0.0) / numCount });
 
         // perplexity
         if (sum_perps > 0) {
-            measures.put(Measure.Perplexity, Math.exp(sum_perps / numCount));
+            measures.put(Measure.Perplexity, new Double[] { Math.exp(sum_perps / numCount) });
         }
 
         return measures;
@@ -627,7 +628,7 @@ public abstract class Recommender implements Runnable{
      * @return the evaluation results of ranking predictions
      */
 
-    protected Map<Measure, Double> evalRankings() throws Exception {
+    protected Map<Measure, Double[]> evalRankings() throws Exception {
 
         HashMap<Integer, HashMultimap<Integer, Integer>> uciList=rateDao.getUserCtxList(testMatrix);
 
@@ -646,8 +647,10 @@ public abstract class Recommender implements Runnable{
 
         List<Double> precs5 = new ArrayList<>(capacity);
         List<Double> precs10 = new ArrayList<>(capacity);
+        List<Map<Integer, Double>> precs = new ArrayList<>(capacity);
         List<Double> recalls5 = new ArrayList<>(capacity);
         List<Double> recalls10 = new ArrayList<>(capacity);
+        List<Map<Integer, Double>> recalls = new ArrayList<>(capacity);
         List<Double> aps = new ArrayList<>(capacity);
         List<Double> rrs = new ArrayList<>(capacity);
         List<Double> aucs = new ArrayList<>(capacity);
@@ -700,8 +703,10 @@ public abstract class Recommender implements Runnable{
 
             List<Double> c_precs5 = new ArrayList<>(c_capacity);
             List<Double> c_precs10 = new ArrayList<>(c_capacity);
+            List<Map<Integer, Double>> c_precs = new ArrayList<>(c_capacity);
             List<Double> c_recalls5 = new ArrayList<>(c_capacity);
             List<Double> c_recalls10 = new ArrayList<>(c_capacity);
+            List<Map<Integer, Double>> c_recalls = new ArrayList<>(c_capacity);
             List<Double> c_aps = new ArrayList<>(c_capacity);
             List<Double> c_rrs = new ArrayList<>(c_capacity);
             List<Double> c_aucs = new ArrayList<>(c_capacity);
@@ -803,14 +808,22 @@ public abstract class Recommender implements Runnable{
                 double nDCG = Measures.nDCG(rankedItems, correctItems);
                 double RR = Measures.RR(rankedItems, correctItems);
 
-                List<Integer> cutoffs = Arrays.asList(5, 10);
-                Map<Integer, Double> precs = Measures.PrecAt(rankedItems, correctItems, cutoffs);
-                Map<Integer, Double> recalls = Measures.RecallAt(rankedItems, correctItems, cutoffs);
+                List<Integer> cutoffs = new LinkedList<Integer>();
+                for (int i = 1; i <= numTopNRanks; i++) {
+                    cutoffs.add(i);
+                }
+                if (numTopNRanks < 5) cutoffs.add(5);
+                if (numTopNRanks < 10) cutoffs.add(10);
 
-                c_precs5.add(precs.get(5));
-                c_precs10.add(precs.get(10));
-                c_recalls5.add(recalls.get(5));
-                c_recalls10.add(recalls.get(10));
+                Map<Integer, Double> precsAt = Measures.PrecAt(rankedItems, correctItems, cutoffs);
+                Map<Integer, Double> recallsAt = Measures.RecallAt(rankedItems, correctItems, cutoffs);
+
+                c_precs5.add(precsAt.get(5));
+                c_precs10.add(precsAt.get(10));
+                c_precs.add(precsAt);
+                c_recalls5.add(recallsAt.get(5));
+                c_recalls10.add(recallsAt.get(10));
+                c_recalls.add(recallsAt);
 
                 c_aucs.add(AUC);
                 c_aps.add(AP);
@@ -843,6 +856,8 @@ public abstract class Recommender implements Runnable{
             ds10.add(isDiverseUsed ? Stats.mean(c_ds10) : 0.0);
             precs5.add(Stats.mean(c_precs5));
             precs10.add(Stats.mean(c_precs10));
+            precs.add(meanOverListOfMaps(c_precs));
+            recalls.add(meanOverListOfMaps(c_recalls));
             recalls5.add(Stats.mean(c_recalls5));
             recalls10.add(Stats.mean(c_recalls10));
             aucs.add(Stats.mean(c_aucs));
@@ -859,19 +874,43 @@ public abstract class Recommender implements Runnable{
         }
 
         // measure the performance
-        Map<Measure, Double> measures = new HashMap<>();
-        measures.put(Measure.D5, isDiverseUsed ? Stats.mean(ds5) : 0.0);
-        measures.put(Measure.D10, isDiverseUsed ? Stats.mean(ds10) : 0.0);
-        measures.put(Measure.Pre5, Stats.mean(precs5));
-        measures.put(Measure.Pre10, Stats.mean(precs10));
-        measures.put(Measure.Rec5, Stats.mean(recalls5));
-        measures.put(Measure.Rec10, Stats.mean(recalls10));
-        measures.put(Measure.AUC, Stats.mean(aucs));
-        measures.put(Measure.NDCG, Stats.mean(ndcgs));
-        measures.put(Measure.MAP, Stats.mean(aps));
-        measures.put(Measure.MRR, Stats.mean(rrs));
+        Map<Measure, Double[]> measures = new HashMap<>();
+        measures.put(Measure.D5, isDiverseUsed ? new Double[] { Stats.mean(ds5) } : new Double[] { 0.0 });
+        measures.put(Measure.D10, isDiverseUsed ? new Double[] { Stats.mean(ds10) } : new Double[] { 0.0 });
+        measures.put(Measure.Pre5, new Double[] { Stats.mean(precs5) });
+        measures.put(Measure.Pre10, new Double[] { Stats.mean(precs10) });
+        measures.put(Measure.Rec5, new Double[] { Stats.mean(recalls5) });
+        measures.put(Measure.Rec10, new Double[] { Stats.mean(recalls10) });
+        Double[] precs_array = new Double[numTopNRanks];
+        Double[] recalls_array = new Double[numTopNRanks];
+        Map<Integer, Double> precs_map = meanOverListOfMaps(precs);
+        Map<Integer, Double> recalls_map = meanOverListOfMaps(recalls);
+        for (int i=1; i<=numTopNRanks; i++) {
+            precs_array[i-1] = precs_map.get(i);
+            recalls_array[i-1] = recalls_map.get(i);
+        }
+        measures.put(Measure.Pre, precs_array);
+        measures.put(Measure.Rec, recalls_array);
+        measures.put(Measure.AUC, new Double[] { Stats.mean(aucs) });
+        measures.put(Measure.NDCG, new Double[] { Stats.mean(ndcgs) });
+        measures.put(Measure.MAP, new Double[] { Stats.mean(aps) });
+        measures.put(Measure.MRR, new Double[] { Stats.mean(rrs) });
 
         return measures;
+    }
+
+
+    private Map<Integer, Double> meanOverListOfMaps(List<Map<Integer, Double>> list) {
+        Map<Integer, Double> list_avg = new HashMap<Integer, Double>();
+        for (int i=1; i<=list.get(0).size(); i++) {
+            double[] i_values = new double[list.size()];
+            for (int j=0; j<list.size(); j++) {
+                i_values[j] = list.get(j).get(i);
+            }
+            double i_avg = Stats.mean(i_values);
+            list_avg.put(i, i_avg);
+        }
+        return list_avg;
     }
 
     /**
