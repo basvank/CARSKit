@@ -394,7 +394,7 @@ public class CARSKit {
             //Logs.info("Measures: "+algo.measures.entrySet().size());
             for (Entry<Measure, Double[]> en : algo.measures.entrySet()) {
                 Measure m = en.getKey();
-                if (m == Measure.Pre || m == Measure.Rec) {
+                if (m == Measure.Pre || m == Measure.Rec || m == Measure.MAPS) {
                     Double[] vals = new Double[en.getValue().length];
                     Arrays.fill(vals, new Double(0.0));
                     if (avgMeasure.containsKey(m)) vals = avgMeasure.get(m);
