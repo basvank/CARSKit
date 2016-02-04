@@ -860,11 +860,14 @@ public abstract class Recommender implements Runnable{
             ds10.add(isDiverseUsed ? Stats.mean(c_ds10) : 0.0);
             precs5.add(Stats.mean(c_precs5));
             precs10.add(Stats.mean(c_precs10));
-            precs.add(meanOverListOfMaps(c_precs));
-            recalls.add(meanOverListOfMaps(c_recalls));
+            if (c_precs.size() > 0) {
+                precs.add(meanOverListOfMaps(c_precs));
+                recalls.add(meanOverListOfMaps(c_recalls));
+                aps_at.add(meanOverListOfMaps(c_aps_at));
+            }
             recalls5.add(Stats.mean(c_recalls5));
             recalls10.add(Stats.mean(c_recalls10));
-            aps_at.add(meanOverListOfMaps(c_aps_at));
+
             aucs.add(Stats.mean(c_aucs));
             ndcgs.add(Stats.mean(c_ndcgs));
             aps.add(Stats.mean(c_aps));
@@ -889,13 +892,22 @@ public abstract class Recommender implements Runnable{
         Double[] precs_array = new Double[numTopNRanks];
         Double[] recalls_array = new Double[numTopNRanks];
         Double[] maps_array = new Double[numTopNRanks];
-        Map<Integer, Double> precs_map = meanOverListOfMaps(precs);
-        Map<Integer, Double> recalls_map = meanOverListOfMaps(recalls);
-        Map<Integer, Double> maps_map = meanOverListOfMaps(aps_at);
-        for (int i=1; i<=numTopNRanks; i++) {
-            precs_array[i-1] = precs_map.get(i);
-            recalls_array[i-1] = recalls_map.get(i);
-            maps_array[i-1] = maps_map.get(i);
+        if (precs.size() > 0) {
+            Map<Integer, Double> precs_map = meanOverListOfMaps(precs);
+            Map<Integer, Double> recalls_map = meanOverListOfMaps(recalls);
+            Map<Integer, Double> maps_map = meanOverListOfMaps(aps_at);
+            for (int i = 1; i <= numTopNRanks; i++) {
+                precs_array[i - 1] = precs_map.get(i);
+                recalls_array[i - 1] = recalls_map.get(i);
+                maps_array[i - 1] = maps_map.get(i);
+            }
+        }
+        else {
+            for (int i = 1; i <= numTopNRanks; i++) {
+                precs_array[i - 1] = 0.0;
+                recalls_array[i - 1] = 0.0;
+                maps_array[i - 1] = 0.0;
+            }
         }
         measures.put(Measure.Pre, precs_array);
         measures.put(Measure.Rec, recalls_array);

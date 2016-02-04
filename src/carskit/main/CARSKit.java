@@ -343,7 +343,7 @@ public class CARSKit {
         String time = String.format("'%s','%s'", Dates.parse(ms.get(Measure.TrainTime)[0].longValue()),
                 Dates.parse(ms.get(Measure.TestTime)[0].longValue()));
         // double commas as the separation of results and configuration
-        String evalInfo = String.format("Final Results by %s, %s, %s, Time: %s%s", algo.algoName, result, algo.toString(), time,
+        String evalInfo = String.format("Final Results by %s on dataset %s, %s, %s, Time: %s%s", algo.algoName, cf.getPath("dataset.ratings"), result, algo.toString(), time,
                 (outputOptions.contains("--measures-only") ? "" : "\n"));
 
         Logs.info(evalInfo);
