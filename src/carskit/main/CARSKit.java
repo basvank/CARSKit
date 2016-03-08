@@ -36,6 +36,8 @@ import happy.coding.io.Strings;
 import happy.coding.math.Randoms;
 import happy.coding.system.Dates;
 
+import java.io.File;
+
 import java.io.BufferedReader;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -228,13 +230,19 @@ public class CARSKit {
 
             DataTransformer transformer = new DataTransformer();
             int flag = validateDataFormat(OriginalRatingDataPath);
-            transformer.setParameters(flag, OriginalRatingDataPath, WorkingPath);
+            String fileName = new File(OriginalRatingDataPath).getName();
+            transformer.setParameters(flag, OriginalRatingDataPath, WorkingPath, fileName);
             Thread t = new Thread(transformer);
             t.start();
             t.join(); // for large data, the transformation and output to external file may take time!
+
+            rateDao = new DataDAO(WorkingPath+fileName+"_binary");
+        }
+        else {
+            rateDao = new DataDAO(OriginalRatingDataPath);
         }
 
-        rateDao = new DataDAO(WorkingPath+"ratings_binary.txt");
+
         rateDao.printSpecs();
 
 
@@ -392,6 +400,7 @@ public class CARSKit {
         Map<Measure, Double[]> avgMeasure = new HashMap<>();
         for (Recommender algo : algos) {
             //Logs.info("Measures: "+algo.measures.entrySet().size());
+            //Logs.info("Measures {}", algo.measures);
             for (Entry<Measure, Double[]> en : algo.measures.entrySet()) {
                 Measure m = en.getKey();
                 if (m == Measure.Pre || m == Measure.Rec || m == Measure.MAPS) {

@@ -33,6 +33,7 @@ import happy.coding.math.Stats;
 import happy.coding.system.Dates;
 import happy.coding.system.Debug;
 
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.concurrent.TimeUnit;
@@ -474,7 +475,9 @@ public abstract class Recommender implements Runnable{
         if (isResultsOut) {
             preds = new ArrayList<String>(1500);
             preds.add("userId\titemId\tcontexts\trating\tprediction"); // optional: file header
-            toFile = workingPath + algoName + "-rating-predictions" + foldInfo + ".txt"; // the output-file name
+            Date now = new Date(System.currentTimeMillis());
+            SimpleDateFormat sdf = new SimpleDateFormat("ddMMyyHHmmssSSS");
+            toFile = workingPath + algoName + "-rating-predictions" + foldInfo + "-" + sdf.format(now) + ".txt"; // the output-file name
             FileIO.deleteFile(toFile); // delete possibly old files
         }
 
@@ -667,8 +670,10 @@ public abstract class Recommender implements Runnable{
         if (isResultsOut) {
             preds = new ArrayList<String>(1500);
             preds.add("# userId: recommendations in (itemId, ranking score) pairs, where a correct recommendation is denoted by symbol *."); // optional: file header
+            Date now = new Date(System.currentTimeMillis());
+            SimpleDateFormat sdf = new SimpleDateFormat("ddMMyyHHmmssSSS");
             toFile = workingPath
-                    + String.format("%s-top-%d-items%s.txt", algoName, numTopNRanks, foldInfo); // the output-file name
+                    + String.format("%s-top-%d-items%s-%s.txt", algoName, numTopNRanks, foldInfo, sdf.format(now)); // the output-file name
             FileIO.deleteFile(toFile); // delete possibly old files
         }
 

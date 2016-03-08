@@ -47,11 +47,13 @@ public class DataTransformer implements Runnable {
     protected int flag;
     protected String dataPath;
     protected String outputfolder;
+    protected String outputFile;
 
-    public void setParameters(int f, String path, String folder) {
+    public void setParameters(int f, String path, String folder, String outputFile) {
         this.flag = f;
         this.dataPath = path;
         this.outputfolder = folder;
+        this.outputFile = outputFile + "_binary";
     }
 
     public String TransformationFromLooseToBinary() throws Exception {
@@ -80,8 +82,8 @@ public class DataTransformer implements Runnable {
 
         this.PublishNewRatingFiles(outputfolder, conditions, newlines, true);
 
-        if (FileIO.exist(outputfolder + "ratings_binary.txt"))
-            return "Data transformaton completed (from Loose to Binary format). See new rating file: " + outputfolder + "ratings_binary.txt";
+        if (FileIO.exist(outputfolder + outputFile))
+            return "Data transformaton completed (from Loose to Binary format). See new rating file: " + outputfolder + outputFile;
         else
             return "Data transformation failed. See output folder: " + outputfolder;
     }
@@ -113,8 +115,8 @@ public class DataTransformer implements Runnable {
 
         this.PublishNewRatingFiles(outputfolder, conditions, newlines, false);
 
-        if (FileIO.exist(outputfolder + "ratings_binary.txt"))
-            return "Data transformaton completed (from Compact to Binary format). See new rating file: " + outputfolder + "ratings_binary.txt";
+        if (FileIO.exist(outputfolder + outputFile))
+            return "Data transformaton completed (from Compact to Binary format). See new rating file: " + outputfolder + outputFile;
         return "Data transformaton completed (from Compact to Binary format). See " + outputfolder;
     }
 
@@ -137,7 +139,7 @@ public class DataTransformer implements Runnable {
         }
         String header = headerBuilder.toString();
 
-        BufferedWriter bw = FileIO.getWriter(outputfolder + "ratings_binary.txt");
+        BufferedWriter bw = FileIO.getWriter(outputfolder + outputFile);
         bw.write(header + "\n");
         bw.flush();
 
@@ -202,7 +204,8 @@ public class DataTransformer implements Runnable {
         try {
             switch (flag) {
                 case 1: // it is binary format!
-                    FileIO.copyFile(this.dataPath, this.outputfolder + "ratings_binary.txt");
+                    Logs.info("Data already in binary format, copying...");
+                    FileIO.copyFile(this.dataPath, this.outputfolder + this.outputFile);
                     break;
                 case 2: // it is loose format!
                     Logs.warn("You rating data is in Loose format. CARSKit is working on transformation on the data format...");
