@@ -708,6 +708,8 @@ public abstract class Recommender implements Runnable{
             private final int capacity;
             private final int numTopNRanks;
 
+            private Recommender par;
+
             // Synchronized lists
             List<String> preds;
             List<Double> ds5;
@@ -731,13 +733,14 @@ public abstract class Recommender implements Runnable{
                               List<Double> precs5, List<Double> precs10, List<Map<Integer, Double>> precs,
                               List<Map<Integer, Double>> recalls, List<Map<Integer, Double>> aps_at,
                               List<Double> recalls5, List<Double> recalls10, List<Double> aucs, List<Double> ndcgs,
-                              List<Double> aps, List<Double> rrs) {
+                              List<Double> aps, List<Double> rrs, Recommender par) {
                 this.queue = q;
                 this.uciList = uciList;
                 this.uciList_train = uciList_train;
                 this.candItems = candItems;
                 this.capacity = capacity;
                 this.numTopNRanks = numTopNRanks;
+                this.par = par;
 
                 this.preds = preds;
                 this.ds5 = ds5;
@@ -772,9 +775,12 @@ public abstract class Recommender implements Runnable{
 
                     // Nothing
                 }
+                catch (Exception e) {
+                    Logs.error("Exception {{}}", e);
+                }
             }
 
-            private void testUser(int u) {
+            private void testUser(int u) throws Exception {
                 Multimap<Integer, Integer> cis = uciList.get(u);
 
                 int c_capacity = cis.keySet().size();
@@ -847,7 +853,7 @@ public abstract class Recommender implements Runnable{
                     List<Map.Entry<Integer, Double>> itemScores = new ArrayList<>(Lists.initSize(candItems));
                     for (final Integer j : candItems) {
                         if (ratedItemsFilter.equals("none") || !ratedItems.contains(j)) {
-                            final double rank = globalMean;
+                            final double rank = par.ranking(u, j, c);
                             if (!Double.isNaN(rank)) {
                                 itemScores.add(new SimpleImmutableEntry<Integer, Double>(j, rank));
                             }
@@ -967,7 +973,7 @@ public abstract class Recommender implements Runnable{
         Logs.info("Starting calculation over " + cores + " cores");
         for (int i = 0; i < cores; i++) {
             UserWorker w = new UserWorker(queue, uciList, uciList_train, candItems, capacity, numTopNRanks,
-                    preds, ds5, ds10, precs5, precs10, precs, recalls, aps_at, recalls5, recalls10, aucs, ndcgs, aps, rrs);
+                    preds, ds5, ds10, precs5, precs10, precs, recalls, aps_at, recalls5, recalls10, aucs, ndcgs, aps, rrs, this);
             w.start();
         }
         // for each test user
