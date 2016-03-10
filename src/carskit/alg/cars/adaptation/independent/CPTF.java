@@ -140,10 +140,16 @@ public class CPTF extends TensorRecommender {
         double pred = 0;
         int[] keys = getKeys(u,j,c);
 
+
+
         for (int f = 0; f < numFactors; f++) {
+
+
 
             double prod = 1;
             for (int d = 0; d < numDimensions; d++) {
+                System.out.println("M[" + d + "] size: " + M[d].numRows() + "," + M[d].numColumns() + "(" + keys[d] + "," + f + ")");
+
                 prod *= M[d].get(keys[d], f);
             }
 

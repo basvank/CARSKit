@@ -36,6 +36,8 @@ import happy.coding.system.Debug;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
 
 import carskit.data.processor.DataDAO;
@@ -48,6 +50,7 @@ import librec.data.MatrixEntry;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.cache.LoadingCache;
+import sun.org.mozilla.javascript.ast.Block;
 
 
 public abstract class Recommender implements Runnable{
@@ -635,8 +638,7 @@ public abstract class Recommender implements Runnable{
 
         HashMap<Integer, HashMultimap<Integer, Integer>> uciList=rateDao.getUserCtxList(testMatrix);
 
-        // Create a ratedItems set to enable filtering. Remains empty if no filter enabled (items.filter=none)
-        Set<Integer> ratedItems = new HashSet<Integer>();
+
         HashMap<Integer, HashMultimap<Integer, Integer>> uciList_train = null;
         if (!ratedItemsFilter.equals("none")) {
             // If filtering is enabled, get all the ratings in the training set
@@ -668,7 +670,7 @@ public abstract class Recommender implements Runnable{
         String toFile = null;
         int numTopNRanks = numRecs < 0 ? 10 : numRecs;
         if (isResultsOut) {
-            preds = new ArrayList<String>(1500);
+            preds = Collections.synchronizedList(new ArrayList<String>());
             preds.add("# userId: recommendations in (itemId, ranking score) pairs, where a correct recommendation is denoted by symbol *."); // optional: file header
             Date now = new Date(System.currentTimeMillis());
             SimpleDateFormat sdf = new SimpleDateFormat("ddMMyyHHmmssSSS");
@@ -697,191 +699,289 @@ public abstract class Recommender implements Runnable{
             }
         }
 
-        // for each test user
-        for (int u:uciList.keySet()) {
 
-            Multimap<Integer, Integer> cis = uciList.get(u);
+        class UserWorker extends Thread {
+            private final BlockingQueue<Integer> queue;
+            private final HashMap<Integer, HashMultimap<Integer, Integer>> uciList;
+            private final HashMap<Integer, HashMultimap<Integer, Integer>> uciList_train;
+            private final Set<Integer> candItems;
+            private final int capacity;
+            private final int numTopNRanks;
 
-            int c_capacity = cis.keySet().size();
+            // Synchronized lists
+            List<String> preds;
+            List<Double> ds5;
+            List<Double> ds10;
+            List<Double> precs5;
+            List<Double> precs10;
+            List<Map<Integer, Double>> precs;
+            List<Map<Integer, Double>> recalls;
+            List<Map<Integer, Double>> aps_at;
+            List<Double> recalls5;
+            List<Double> recalls10;
 
-            List<Double> c_ds5 = new ArrayList<>(isDiverseUsed ? c_capacity : 0);
-            List<Double> c_ds10 = new ArrayList<>(isDiverseUsed ? c_capacity : 0);
+            List<Double> aucs;
+            List<Double> ndcgs;
+            List<Double> aps;
+            List<Double> rrs;
 
-            List<Double> c_precs5 = new ArrayList<>(c_capacity);
-            List<Double> c_precs10 = new ArrayList<>(c_capacity);
-            List<Map<Integer, Double>> c_precs = new ArrayList<>(c_capacity);
-            List<Double> c_recalls5 = new ArrayList<>(c_capacity);
-            List<Double> c_recalls10 = new ArrayList<>(c_capacity);
-            List<Map<Integer, Double>> c_recalls = new ArrayList<>(c_capacity);
-            List<Map<Integer, Double>> c_aps_at = new ArrayList<>(c_capacity);
-            List<Double> c_aps = new ArrayList<>(c_capacity);
-            List<Double> c_rrs = new ArrayList<>(c_capacity);
-            List<Double> c_aucs = new ArrayList<>(c_capacity);
-            List<Double> c_ndcgs = new ArrayList<>(c_capacity);
+            public UserWorker(BlockingQueue<Integer> q, HashMap<Integer, HashMultimap<Integer, Integer>> uciList,
+                              HashMap<Integer, HashMultimap<Integer, Integer>> uciList_train, Set<Integer> candItems,
+                              int capacity, int numTopNRanks, List<String> preds, List<Double> ds5, List<Double> ds10,
+                              List<Double> precs5, List<Double> precs10, List<Map<Integer, Double>> precs,
+                              List<Map<Integer, Double>> recalls, List<Map<Integer, Double>> aps_at,
+                              List<Double> recalls5, List<Double> recalls10, List<Double> aucs, List<Double> ndcgs,
+                              List<Double> aps, List<Double> rrs) {
+                this.queue = q;
+                this.uciList = uciList;
+                this.uciList_train = uciList_train;
+                this.candItems = candItems;
+                this.capacity = capacity;
+                this.numTopNRanks = numTopNRanks;
 
-            HashMultimap<Integer, Integer> cList_train = null;
-            if (!ratedItemsFilter.equals("none")) {
-                // Get the ratings in the training set by the current user
-                cList_train = (uciList_train.containsKey(u)) ? uciList_train.get(u) : HashMultimap.<Integer, Integer>create();
-                if (ratedItemsFilter.equals("user")) {
-                    // If the filter is on user, then this is the ratedItems set
-                    ratedItems = Sets.newHashSet(cList_train.values());
+                this.preds = preds;
+                this.ds5 = ds5;
+                this.ds10 = ds10;
+                this.precs5 = precs5;
+                this.precs10 = precs10;
+                this.precs = precs;
+                this.recalls = recalls;
+                this.aps_at = aps_at;
+                this.recalls5 = recalls5;
+                this.recalls10 = recalls10;
+                this.aucs = aucs;
+                this.ndcgs = ndcgs;
+                this.aps = aps;
+                this.rrs = rrs;
+            }
+
+            public void run() {
+                try {
+                    Logs.info("Thread " + Thread.currentThread().getId() + " started");
+                    while (true) {
+                        Integer u = queue.take();
+                        if (u == Integer.MIN_VALUE) {
+                            Logs.info("Thread " + Thread.currentThread().getId() + " stopped");
+                            return;
+                        } else {
+                            testUser(u);
+                        }
+                    }
+                }
+                catch (InterruptedException ie) {
+
+                    // Nothing
                 }
             }
 
-            // for each ctx
-            for (int c : cis.keySet()) {
+            private void testUser(int u) {
+                Multimap<Integer, Integer> cis = uciList.get(u);
 
-                if (verbose && ((u + 1) % 100 == 0))
-                    Logs.debug("{}{} evaluates progress: {} / {}", algoName, foldInfo, u + 1, capacity);
+                int c_capacity = cis.keySet().size();
 
-                // number of candidate items for all users
-                int numCands = candItems.size();
+                List<Double> c_ds5 = new ArrayList<>(isDiverseUsed ? c_capacity : 0);
+                List<Double> c_ds10 = new ArrayList<>(isDiverseUsed ? c_capacity : 0);
 
-                // get positive items from test matrix
-                Collection<Integer> posItems = cis.get(c);
-                List<Integer> correctItems = new ArrayList<>();
+                List<Double> c_precs5 = new ArrayList<>(c_capacity);
+                List<Double> c_precs10 = new ArrayList<>(c_capacity);
+                List<Map<Integer, Double>> c_precs = new ArrayList<>(c_capacity);
+                List<Double> c_recalls5 = new ArrayList<>(c_capacity);
+                List<Double> c_recalls10 = new ArrayList<>(c_capacity);
+                List<Map<Integer, Double>> c_recalls = new ArrayList<>(c_capacity);
+                List<Map<Integer, Double>> c_aps_at = new ArrayList<>(c_capacity);
+                List<Double> c_aps = new ArrayList<>(c_capacity);
+                List<Double> c_rrs = new ArrayList<>(c_capacity);
+                List<Double> c_aucs = new ArrayList<>(c_capacity);
+                List<Double> c_ndcgs = new ArrayList<>(c_capacity);
 
-                // intersect with the candidate items
-                for (Integer j : posItems) {
-                    if (candItems.contains(j))
-                        correctItems.add(j);
-                }
+                // Create a ratedItems set to enable filtering. Remains empty if no filter enabled (items.filter=none)
+                Set<Integer> ratedItems = new HashSet<Integer>();
 
-                if (correctItems.size() == 0)
-                    continue; // no testing data for user u
-
-                if (ratedItemsFilter.equals("user-context")) {
-                    // If filter is on user-context, then get the ratings in this context if present in cList_train
-                    if (cList_train.containsKey(c)) {
-                        ratedItems = cList_train.get(c);
+                HashMultimap<Integer, Integer> cList_train = null;
+                if (!ratedItemsFilter.equals("none")) {
+                    // Get the ratings in the training set by the current user
+                    cList_train = (uciList_train.containsKey(u)) ? uciList_train.get(u) : HashMultimap.<Integer, Integer>create();
+                    if (ratedItemsFilter.equals("user")) {
+                        // If the filter is on user, then this is the ratedItems set
+                        ratedItems = Sets.newHashSet(cList_train.values());
                     }
                 }
 
-                // Log ratedItems
+                // for each ctx
+                for (int c : cis.keySet()) {
+
+                    if (verbose && ((u + 1) % 100 == 0))
+                        Logs.debug("{}{} evaluates progress: {} / {}", algoName, foldInfo, u + 1, capacity);
+
+                    // number of candidate items for all users
+                    int numCands = candItems.size();
+
+                    // get positive items from test matrix
+                    Collection<Integer> posItems = cis.get(c);
+                    List<Integer> correctItems = new ArrayList<>();
+
+                    // intersect with the candidate items
+                    for (Integer j : posItems) {
+                        if (candItems.contains(j))
+                            correctItems.add(j);
+                    }
+
+                    if (correctItems.size() == 0)
+                        continue; // no testing data for user u
+
+                    if (ratedItemsFilter.equals("user-context")) {
+                        // If filter is on user-context, then get the ratings in this context if present in cList_train
+                        if (cList_train.containsKey(c)) {
+                            ratedItems = cList_train.get(c);
+                        }
+                    }
+
+                    // Log ratedItems
                 /* String ratedItemsString = "";
                 for (Integer i : ratedItems) {
                     ratedItemsString += rateDao.getItemId(i).toString() + " ";
                 }
                 Logs.debug("ratedItems user {} (filter {}): {}", rateDao.getUserId(u).toString(), ratedItemsFilter, ratedItemsString); */
 
-                // predict the ranking scores (unordered) of all candidate items
-                List<Map.Entry<Integer, Double>> itemScores = new ArrayList<>(Lists.initSize(candItems));
-                for (final Integer j : candItems) {
-                    if (ratedItemsFilter.equals("none") || !ratedItems.contains(j)) {
-                        final double rank = ranking(u, j, c);
-                        if (!Double.isNaN(rank)) {
-                            itemScores.add(new SimpleImmutableEntry<Integer, Double>(j, rank));
+                    // predict the ranking scores (unordered) of all candidate items
+                    List<Map.Entry<Integer, Double>> itemScores = new ArrayList<>(Lists.initSize(candItems));
+                    for (final Integer j : candItems) {
+                        if (ratedItemsFilter.equals("none") || !ratedItems.contains(j)) {
+                            final double rank = globalMean;
+                            if (!Double.isNaN(rank)) {
+                                itemScores.add(new SimpleImmutableEntry<Integer, Double>(j, rank));
+                            }
+                        } else {
+                            numCands--;
                         }
-                    } else {
-                        numCands--;
                     }
-                }
 
-                if (itemScores.size() == 0)
-                    continue; // no recommendations available for user u
+                    if (itemScores.size() == 0)
+                        continue; // no recommendations available for user u
 
-                // order the ranking scores from highest to lowest: List to preserve orders
-                Lists.sortList(itemScores, true);
-                List<Map.Entry<Integer, Double>> recomd = (numRecs <= 0 || itemScores.size() <= numRecs) ? itemScores
-                        : itemScores.subList(0, numRecs);
+                    // order the ranking scores from highest to lowest: List to preserve orders
+                    Lists.sortList(itemScores, true);
+                    List<Map.Entry<Integer, Double>> recomd = (numRecs <= 0 || itemScores.size() <= numRecs) ? itemScores
+                            : itemScores.subList(0, numRecs);
 
-                List<Integer> rankedItems = new ArrayList<>();
-                StringBuilder sb = new StringBuilder();
-                int count = 0;
-                for (Map.Entry<Integer, Double> kv : recomd) {
-                    Integer item = kv.getKey();
-                    rankedItems.add(item);
+                    List<Integer> rankedItems = new ArrayList<>();
+                    StringBuilder sb = new StringBuilder();
+                    int count = 0;
+                    for (Map.Entry<Integer, Double> kv : recomd) {
+                        Integer item = kv.getKey();
+                        rankedItems.add(item);
 
-                    if (isResultsOut && count < numTopNRanks) {
-                        // restore back to the original item id
-                        sb.append("(").append(rateDao.getItemId(item));
+                        if (isResultsOut && count < numTopNRanks) {
+                            // restore back to the original item id
+                            sb.append("(").append(rateDao.getItemId(item));
 
-                        if (posItems.contains(item))
-                            sb.append("*"); // indicating correct recommendation
+                            if (posItems.contains(item))
+                                sb.append("*"); // indicating correct recommendation
 
-                        sb.append(", ").append(kv.getValue().floatValue()).append(")");
+                            sb.append(", ").append(kv.getValue().floatValue()).append(")");
 
-                        if (++count >= numTopNRanks)
-                            break;
-                        if (count < numTopNRanks)
-                            sb.append(", ");
+                            if (++count >= numTopNRanks)
+                                break;
+                            if (count < numTopNRanks)
+                                sb.append(", ");
+                        }
                     }
-                }
 
-                int numDropped = numCands - rankedItems.size();
-                double AUC = Measures.AUC(rankedItems, correctItems, numDropped);
-                double AP = Measures.AP(rankedItems, correctItems);
-                double nDCG = Measures.nDCG(rankedItems, correctItems);
-                double RR = Measures.RR(rankedItems, correctItems);
+                    int numDropped = numCands - rankedItems.size();
+                    double AUC = Measures.AUC(rankedItems, correctItems, numDropped);
+                    double AP = Measures.AP(rankedItems, correctItems);
+                    double nDCG = Measures.nDCG(rankedItems, correctItems);
+                    double RR = Measures.RR(rankedItems, correctItems);
 
-                List<Integer> cutoffs = new LinkedList<Integer>();
-                for (int i = 1; i <= numTopNRanks; i++) {
-                    cutoffs.add(i);
-                }
-                if (numTopNRanks < 5) cutoffs.add(5);
-                if (numTopNRanks < 10) cutoffs.add(10);
-
-                Map<Integer, Double> precsAt = Measures.PrecAt(rankedItems, correctItems, cutoffs);
-                Map<Integer, Double> recallsAt = Measures.RecallAt(rankedItems, correctItems, cutoffs);
-                Map<Integer, Double> APAt = APAt(rankedItems, correctItems, cutoffs);
-
-                c_precs5.add(precsAt.get(5));
-                c_precs10.add(precsAt.get(10));
-                c_precs.add(precsAt);
-                c_recalls5.add(recallsAt.get(5));
-                c_recalls10.add(recallsAt.get(10));
-                c_recalls.add(recallsAt);
-                c_aps_at.add(APAt);
-
-                c_aucs.add(AUC);
-                c_aps.add(AP);
-                c_rrs.add(RR);
-                c_ndcgs.add(nDCG);
-
-
-                // diversity
-                if (isDiverseUsed) {
-                    double d5 = diverseAt(rankedItems, 5);
-                    double d10 = diverseAt(rankedItems, 10);
-
-                    c_ds5.add(d5);
-                    c_ds10.add(d10);
-                }
-
-                // output predictions
-                if (isResultsOut) {
-                    // restore back to the original user id
-                    preds.add(rateDao.getUserId(u) + ", " + rateDao.getContextSituationFromInnerId(c) + ": " + sb.toString());
-                    if (preds.size() >= 1000) {
-                        FileIO.writeList(toFile, preds, true);
-                        preds.clear();
+                    List<Integer> cutoffs = new LinkedList<Integer>();
+                    for (int i = 1; i <= numTopNRanks; i++) {
+                        cutoffs.add(i);
                     }
-                }
-            } // end a context
+                    if (numTopNRanks < 5) cutoffs.add(5);
+                    if (numTopNRanks < 10) cutoffs.add(10);
 
-            // calculate metrics for a specific user averaged by contexts
-            ds5.add(isDiverseUsed ? Stats.mean(c_ds5) : 0.0);
-            ds10.add(isDiverseUsed ? Stats.mean(c_ds10) : 0.0);
-            precs5.add(Stats.mean(c_precs5));
-            precs10.add(Stats.mean(c_precs10));
-            if (c_precs.size() > 0) {
-                precs.add(meanOverListOfMaps(c_precs));
-                recalls.add(meanOverListOfMaps(c_recalls));
-                aps_at.add(meanOverListOfMaps(c_aps_at));
+                    Map<Integer, Double> precsAt = Measures.PrecAt(rankedItems, correctItems, cutoffs);
+                    Map<Integer, Double> recallsAt = Measures.RecallAt(rankedItems, correctItems, cutoffs);
+                    Map<Integer, Double> APAt = APAt(rankedItems, correctItems, cutoffs);
+
+                    c_precs5.add(precsAt.get(5));
+                    c_precs10.add(precsAt.get(10));
+                    c_precs.add(precsAt);
+                    c_recalls5.add(recallsAt.get(5));
+                    c_recalls10.add(recallsAt.get(10));
+                    c_recalls.add(recallsAt);
+                    c_aps_at.add(APAt);
+
+                    c_aucs.add(AUC);
+                    c_aps.add(AP);
+                    c_rrs.add(RR);
+                    c_ndcgs.add(nDCG);
+
+
+                    // diversity
+                    if (isDiverseUsed) {
+                        double d5 = diverseAt(rankedItems, 5);
+                        double d10 = diverseAt(rankedItems, 10);
+
+                        c_ds5.add(d5);
+                        c_ds10.add(d10);
+                    }
+
+                    // output predictions
+                    if (isResultsOut) {
+                        // restore back to the original user id
+                        preds.add(rateDao.getUserId(u) + ", " + rateDao.getContextSituationFromInnerId(c) + ": " + sb.toString());
+                        /*if (preds.size() >= 1000) {
+                            FileIO.writeList(toFile, preds, true);
+                            preds.clear();
+                        }*/
+                    }
+                } // end a context
+
+                // calculate metrics for a specific user averaged by contexts
+                ds5.add(isDiverseUsed ? Stats.mean(c_ds5) : 0.0);
+                ds10.add(isDiverseUsed ? Stats.mean(c_ds10) : 0.0);
+                precs5.add(Stats.mean(c_precs5));
+                precs10.add(Stats.mean(c_precs10));
+                if (c_precs.size() > 0) {
+                    precs.add(meanOverListOfMaps(c_precs));
+                    recalls.add(meanOverListOfMaps(c_recalls));
+                    aps_at.add(meanOverListOfMaps(c_aps_at));
+                }
+                recalls5.add(Stats.mean(c_recalls5));
+                recalls10.add(Stats.mean(c_recalls10));
+
+                aucs.add(Stats.mean(c_aucs));
+                ndcgs.add(Stats.mean(c_ndcgs));
+                aps.add(Stats.mean(c_aps));
+                rrs.add(Stats.mean(c_rrs));
             }
-            recalls5.add(Stats.mean(c_recalls5));
-            recalls10.add(Stats.mean(c_recalls10));
-
-            aucs.add(Stats.mean(c_aucs));
-            ndcgs.add(Stats.mean(c_ndcgs));
-            aps.add(Stats.mean(c_aps));
-            rrs.add(Stats.mean(c_rrs));
         }
 
 
+
+        // Get results for each user in multithreaded way
+        BlockingQueue<Integer> queue = new SynchronousQueue<Integer>();
+
+        int cores = Runtime.getRuntime().availableProcessors();
+        Logs.info("Starting calculation over " + cores + " cores");
+        for (int i = 0; i < cores; i++) {
+            UserWorker w = new UserWorker(queue, uciList, uciList_train, candItems, capacity, numTopNRanks,
+                    preds, ds5, ds10, precs5, precs10, precs, recalls, aps_at, recalls5, recalls10, aucs, ndcgs, aps, rrs);
+            w.start();
+        }
+        // for each test user
+        for (int u:uciList.keySet()) {
+            queue.put(u);
+        }
+        for (int i = 0; i < cores; i++) {
+            queue.put(Integer.MIN_VALUE);
+        }
+
+        Logs.info("Continue in single thread");
+
         // write results out first
-        if (isResultsOut && preds.size() > 0) {
+        if (isResultsOut && preds != null && preds.size() > 0) {
             FileIO.writeList(toFile, preds, true);
             Logs.debug("{}{} has writeen item recommendations to {}", algoName, foldInfo, toFile);
         }
