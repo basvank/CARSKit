@@ -74,6 +74,8 @@ public abstract class Recommender implements Runnable{
 
     // verbose
     protected static boolean verbose = true;
+    // significance output
+    protected static boolean significanceOutput = false;
 
     // line configer for item ranking, evaluation
     protected static LineConfiger rankOptions, algoOptions;
@@ -236,6 +238,7 @@ public abstract class Recommender implements Runnable{
             LineConfiger outputOptions = cf.getParamOptions("output.setup");
             if (outputOptions != null) {
                 verbose = outputOptions.isOn("-verbose", true);
+                significanceOutput = outputOptions.isOn("-significancedata", true);
                 isSaveModel = outputOptions.contains("--save-model");
             }
 
@@ -667,7 +670,9 @@ public abstract class Recommender implements Runnable{
         Set<Integer> candItems = rateDao.getItemList(trainMatrix);
 
         List<String> preds = null;
+        List<String> significanceData = null;
         String toFile = null;
+        String sigToFile = null;
         int numTopNRanks = numRecs < 0 ? 10 : numRecs;
         if (isResultsOut) {
             preds = Collections.synchronizedList(new ArrayList<String>());
@@ -677,6 +682,16 @@ public abstract class Recommender implements Runnable{
             toFile = workingPath
                     + String.format("%s-top-%d-items%s-%s.txt", algoName, numTopNRanks, foldInfo, sdf.format(now)); // the output-file name
             FileIO.deleteFile(toFile); // delete possibly old files
+        }
+        if (significanceOutput) {
+            significanceData = Collections.synchronizedList(new ArrayList<String>());
+            significanceData.add("userid,metric,N,value"); // optional: file header
+            Date now = new Date(System.currentTimeMillis());
+            SimpleDateFormat sdf = new SimpleDateFormat("ddMMyyHHmmssSSS");
+            String[] fileName = cf.getPath("dataset.ratings").split("/");
+            sigToFile = workingPath
+                    + String.format("significance-%s-%s-%s.txt", algoName, fileName[fileName.length-1], sdf.format(now)); // the output-file name
+            FileIO.deleteFile(sigToFile); // delete possibly old files
         }
 
         if (verbose)
@@ -712,6 +727,7 @@ public abstract class Recommender implements Runnable{
 
             // Synchronized lists
             List<String> preds;
+            List<String> significanceData;
             List<Double> ds5;
             List<Double> ds10;
             List<Double> precs5;
@@ -729,7 +745,7 @@ public abstract class Recommender implements Runnable{
 
             public UserWorker(BlockingQueue<Integer> q, HashMap<Integer, HashMultimap<Integer, Integer>> uciList,
                               HashMap<Integer, HashMultimap<Integer, Integer>> uciList_train, Set<Integer> candItems,
-                              int capacity, int numTopNRanks, List<String> preds, List<Double> ds5, List<Double> ds10,
+                              int capacity, int numTopNRanks, List<String> preds, List<String> significanceData, List<Double> ds5, List<Double> ds10,
                               List<Double> precs5, List<Double> precs10, List<Map<Integer, Double>> precs,
                               List<Map<Integer, Double>> recalls, List<Map<Integer, Double>> aps_at,
                               List<Double> recalls5, List<Double> recalls10, List<Double> aucs, List<Double> ndcgs,
@@ -743,6 +759,7 @@ public abstract class Recommender implements Runnable{
                 this.par = par;
 
                 this.preds = preds;
+                this.significanceData = significanceData;
                 this.ds5 = ds5;
                 this.ds10 = ds10;
                 this.precs5 = precs5;
@@ -767,7 +784,12 @@ public abstract class Recommender implements Runnable{
                             Logs.info("Thread " + Thread.currentThread().getId() + " stopped");
                             return;
                         } else {
-                            testUser(u);
+                            try {
+                                testUser(u);
+                            }
+                            catch (Exception e) {
+                                Logs.error("Exception {} in testUser", e);
+                            }
                         }
                     }
                 }
@@ -950,9 +972,27 @@ public abstract class Recommender implements Runnable{
                 precs5.add(Stats.mean(c_precs5));
                 precs10.add(Stats.mean(c_precs10));
                 if (c_precs.size() > 0) {
-                    precs.add(meanOverListOfMaps(c_precs));
-                    recalls.add(meanOverListOfMaps(c_recalls));
-                    aps_at.add(meanOverListOfMaps(c_aps_at));
+                    Map<Integer, Double> map_precs = meanOverListOfMaps(c_precs);
+                    Map<Integer, Double> map_recalls = meanOverListOfMaps(c_recalls);
+                    Map<Integer, Double> map_maps = meanOverListOfMaps(c_aps_at);
+                    precs.add(map_precs);
+                    recalls.add(map_recalls);
+                    aps_at.add(map_maps);
+                    if (significanceOutput) {
+                        String uid = rateDao.getUserId(u);
+                        significanceData.add(uid + ",prec,1," + map_precs.get(1));
+                        significanceData.add(uid + ",prec,5," + map_precs.get(5));
+                        significanceData.add(uid + ",prec,10," + map_precs.get(10));
+                        significanceData.add(uid + ",prec,20," + map_precs.get(20));
+                        significanceData.add(uid + ",recall,1," + map_recalls.get(1));
+                        significanceData.add(uid + ",recall,5," + map_recalls.get(5));
+                        significanceData.add(uid + ",recall,10," + map_recalls.get(10));
+                        significanceData.add(uid + ",recall,20," + map_recalls.get(20));
+                        significanceData.add(uid + ",map,1," + map_maps.get(1));
+                        significanceData.add(uid + ",map,5," + map_maps.get(5));
+                        significanceData.add(uid + ",map,10," + map_maps.get(10));
+                        significanceData.add(uid + ",map,20," + map_maps.get(20));
+                    }
                 }
                 recalls5.add(Stats.mean(c_recalls5));
                 recalls10.add(Stats.mean(c_recalls10));
@@ -973,7 +1013,7 @@ public abstract class Recommender implements Runnable{
         Logs.info("Starting calculation over " + cores + " cores");
         for (int i = 0; i < cores; i++) {
             UserWorker w = new UserWorker(queue, uciList, uciList_train, candItems, capacity, numTopNRanks,
-                    preds, ds5, ds10, precs5, precs10, precs, recalls, aps_at, recalls5, recalls10, aucs, ndcgs, aps, rrs, this);
+                    preds, significanceData, ds5, ds10, precs5, precs10, precs, recalls, aps_at, recalls5, recalls10, aucs, ndcgs, aps, rrs, this);
             w.start();
         }
         // for each test user
@@ -989,6 +1029,11 @@ public abstract class Recommender implements Runnable{
         // write results out first
         if (isResultsOut && preds != null && preds.size() > 0) {
             FileIO.writeList(toFile, preds, true);
+            if (significanceOutput) {
+                FileIO.writeList(sigToFile, significanceData, true);
+                Logs.debug("Written significance data to {}", sigToFile);
+            }
+
             Logs.debug("{}{} has writeen item recommendations to {}", algoName, foldInfo, toFile);
         }
 

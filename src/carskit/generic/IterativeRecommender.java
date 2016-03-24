@@ -156,7 +156,7 @@ public abstract class IterativeRecommender extends Recommender {
                 default:
                     boolean flag = isResultsOut;
                     isResultsOut = false; // to stop outputs
-                    measure = evalRatings().get(earlyStopMeasure);
+                    measure = evalRatings().get(earlyStopMeasure)[0];
                     isResultsOut = flag; // recover the flag
                     break;
             }
