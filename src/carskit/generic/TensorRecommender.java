@@ -82,7 +82,7 @@ public class TensorRecommender extends IterativeRecommender {
         }
     }
     @Override
-    protected Map<Measure, Double> evalRatings() throws Exception {
+    protected Map<Measure, Double[]> evalRatings() throws Exception {
         List<String> preds = null;
         String toFile = null;
         if (isResultsOut) {
@@ -146,18 +146,18 @@ public class TensorRecommender extends IterativeRecommender {
         double r_mae = sum_r_maes / numCount;
         double r_rmse = Math.sqrt(sum_r_rmses / numCount);
 
-        Map<Measure, Double> measures = new HashMap<>();
-        measures.put(Measure.MAE, mae);
+        Map<Measure, Double[]> measures = new HashMap<>();
+        measures.put(Measure.MAE, new Double[] { mae });
         // normalized MAE: useful for direct comparison among different data sets with distinct rating scales
-        measures.put(Measure.NMAE, mae / (maxRate - minRate));
-        measures.put(Measure.RMSE, rmse);
+        measures.put(Measure.NMAE, new Double[] { mae / (maxRate - minRate) });
+        measures.put(Measure.RMSE, new Double[] { rmse });
 
         // MAE and RMSE after rounding predictions to the closest rating levels
-        measures.put(Measure.rMAE, r_mae);
-        measures.put(Measure.rRMSE, r_rmse);
+        measures.put(Measure.rMAE, new Double[] { r_mae });
+        measures.put(Measure.rRMSE, new Double[] { r_rmse });
 
         // measure zero-one loss
-        measures.put(Measure.MPE, (numPEs + 0.0) / numCount);
+        measures.put(Measure.MPE, new Double[] { (numPEs + 0.0) / numCount });
 
         return measures;
     }
