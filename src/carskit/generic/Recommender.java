@@ -674,13 +674,14 @@ public abstract class Recommender implements Runnable{
         String toFile = null;
         String sigToFile = null;
         int numTopNRanks = numRecs < 0 ? 10 : numRecs;
+        String[] fileName = cf.getPath("dataset.ratings").split("/");
         if (isResultsOut) {
             preds = Collections.synchronizedList(new ArrayList<String>());
             preds.add("# userId: recommendations in (itemId, ranking score) pairs, where a correct recommendation is denoted by symbol *."); // optional: file header
             Date now = new Date(System.currentTimeMillis());
             SimpleDateFormat sdf = new SimpleDateFormat("ddMMyyHHmmssSSS");
             toFile = workingPath
-                    + String.format("%s-top-%d-items%s-%s.txt", algoName, numTopNRanks, foldInfo, sdf.format(now)); // the output-file name
+                    + String.format("top-%d-%s-%s-%s.txt", numTopNRanks, algoName, fileName[fileName.length-1], sdf.format(now)); // the output-file name
             FileIO.deleteFile(toFile); // delete possibly old files
         }
         if (significanceOutput) {
@@ -688,7 +689,6 @@ public abstract class Recommender implements Runnable{
             significanceData.add("userid,metric,N,value"); // optional: file header
             Date now = new Date(System.currentTimeMillis());
             SimpleDateFormat sdf = new SimpleDateFormat("ddMMyyHHmmssSSS");
-            String[] fileName = cf.getPath("dataset.ratings").split("/");
             sigToFile = workingPath
                     + String.format("significance-%s-%s-%s.txt", algoName, fileName[fileName.length-1], sdf.format(now)); // the output-file name
             FileIO.deleteFile(sigToFile); // delete possibly old files

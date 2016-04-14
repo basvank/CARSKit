@@ -452,6 +452,8 @@ public class CARSKit {
                 return new ItemKNN(trainMatrix, testMatrix, fold);
             case "userknn":
                 return new UserKNN(trainMatrix, testMatrix, fold);
+            case "userknntree":
+                return new UserKNNPy(trainMatrix, testMatrix, fold);
             case "slopeone":
                 return new SlopeOne(trainMatrix, testMatrix, fold);
             case "biasedmf":

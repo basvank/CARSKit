@@ -22,6 +22,7 @@ import carskit.generic.TensorRecommender;
 import carskit.data.structure.SparseMatrix;
 import librec.data.DenseMatrix;
 import librec.data.TensorEntry;
+import librec.util.Logs;
 
 /**
  * CANDECOMP/PARAFAC (CP) Tensor Factorization <br>
@@ -107,6 +108,7 @@ public class CPTF extends TensorRecommender {
                     }
                 }
             }
+
 
             loss *= 0.5;
             if (isConverged(iter))
