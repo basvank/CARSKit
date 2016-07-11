@@ -1,6 +1,6 @@
 <project name="CARSKit" default="jar">
 
-    <property name="version" value="v0.2.1-alpha"/>
+    <property name="version" value="v0.2.2-alpha"/>
     <property name="src.dir" value="src"/>
     <property name="build.dir" value="build"/>
     <property name="jar.dir" value="jar"/>

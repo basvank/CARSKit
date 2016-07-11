@@ -25,6 +25,7 @@ import carskit.alg.cars.adaptation.dependent.FM;
 import carskit.alg.cars.adaptation.dependent.dev.*;
 import carskit.alg.cars.adaptation.dependent.sim.*;
 import carskit.alg.cars.adaptation.independent.CPTF;
+import carskit.alg.cars.transformation.hybridfiltering.DCW;
 import carskit.alg.cars.transformation.prefiltering.splitting.UserSplitting;
 import com.google.common.collect.*;
 
@@ -672,6 +673,9 @@ public class CARSKit {
                 rateDao.LoadAsTensor();
                 return new CPTF(trainMatrix, testMatrix, fold);
             }
+
+            case "dcw":
+                return new DCW(trainMatrix, testMatrix, fold);
 
             ///////// Context-aware recommender: CAMF //////////////////////////////////////////////////////////
             case "camf_c":

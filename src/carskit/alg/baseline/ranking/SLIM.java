@@ -83,7 +83,7 @@ public class SLIM extends IterativeRecommender {
 
         if (knn > 0) {
             // find the nearest neighbors for each item based on item similarity
-            SymmMatrix itemCorrs = buildCorrs(false);
+            SymmMatrix2 itemCorrs = buildCorrs(false);
             itemNNs = HashMultimap.create();
 
             for (int j = 0; j < numItems; j++) {

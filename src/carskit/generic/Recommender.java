@@ -788,7 +788,7 @@ public abstract class Recommender implements Runnable{
                                 testUser(u);
                             }
                             catch (Exception e) {
-                                Logs.error("Exception {} in testUser", e);
+                                Logs.error("Exception {} in testUser", e.getStackTrace().toString());
                             }
                         }
                     }
@@ -1181,14 +1181,110 @@ public abstract class Recommender implements Runnable{
     }
 
 
+    public class SymmMatrix2 {
+        protected int dim;
+        //Table<Integer, Integer, Double> data;
+        double[][] data;
 
-    protected SymmMatrix buildCorrs(boolean isUser) {
+        public SymmMatrix2(int dim) {
+            if (dim % 2 == 1) {
+                dim += 1;
+            }
+            this.dim = dim;
+            this.data = new double[dim][dim/2];
+            //ImmutableList<Integer> indices = ImmutableList.of(0, dim);
+            //this.data = ArrayTable.create(ContiguousSet.create(Range.closedOpen(0,dim), DiscreteDomain.integers()),
+            //        ContiguousSet.create(Range.closedOpen(0,dim), DiscreteDomain.integers()));
+        }
+
+        public SymmMatrix2(SymmMatrix2 mat) {
+            this.dim = mat.dim;
+            this.data = mat.data.clone();
+        }
+
+        public SymmMatrix2 clone() {
+            return new SymmMatrix2(this);
+        }
+
+        public double get(int row, int col) {
+            int r = row;
+            int c = col;
+            if (row < col) {
+                r = col;
+                c = row;
+            }
+
+            int halfdim = this.dim/2;
+            if (c < halfdim) {
+                return this.data[r][c];
+            } else {
+                return this.data[this.dim - 1 - r][this.dim - 1 - c];
+            }
+        }
+
+        public void set(int row, int col, double val) {
+            int r = row;
+            int c = col;
+            if (row < col) {
+                r = col;
+                c = row;
+            }
+
+            int halfdim = this.dim/2;
+            if (c < halfdim) {
+                this.data[r][c] = val;
+            } else {
+                this.data[this.dim - 1 - r][this.dim - 1 - c] = val;
+            }
+        }
+
+        public void add(int row, int col, double val) {
+            int r = row;
+            int c = col;
+            if (row < col) {
+                r = col;
+                c = row;
+            }
+
+            int halfdim = this.dim/2;
+            if (c < halfdim) {
+                this.data[r][c] = this.data[r][c] + val;
+            } else {
+                this.data[this.dim - 1 - r][this.dim - 1 - c] = this.data[this.dim - 1 - r][this.dim - 1 - c] + val;
+            }
+        }
+
+        public SparseVector row(int row) {
+            SparseVector res = new SparseVector(this.dim);
+
+            for(int col = 0; col < this.dim; ++col) {
+                double val = this.get(row, col);
+                if(val != 0.0D) {
+                    res.set(col, val);
+                }
+            }
+
+            return res;
+        }
+
+        public String toString() {
+            return "Dimension: " + this.dim + " x " + this.dim + "\n" + this.data.toString();
+        }
+    }
+
+    protected SymmMatrix2 buildCorrs(boolean isUser) {
         Logs.debug("Build {} similarity matrix ...", isUser ? "user" : "item");
 
         int count = isUser ? numUsers : numItems;
-        SymmMatrix corrs = new SymmMatrix(count);
+        SymmMatrix2 corrs = new SymmMatrix2(count);
+
+        int hunderth = count/100;
 
         for (int i = 0; i < count; i++) {
+            if (i % hunderth == 0) {
+                Logs.debug("Loop {} of {}", i, count);
+            }
+
             SparseVector iv = isUser ? train.row(i) : train.column(i);
             if (iv.getCount() == 0)
                 continue;

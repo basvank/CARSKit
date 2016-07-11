@@ -46,7 +46,7 @@ import happy.coding.io.Logs;
 public class ItemKNN extends Recommender {
 
     // user: nearest neighborhood
-    private SymmMatrix itemCorrs;
+    private SymmMatrix2 itemCorrs;
     private DenseVector itemMeans;
 
 

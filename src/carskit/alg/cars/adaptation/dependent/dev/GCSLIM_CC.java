@@ -92,7 +92,7 @@ public class GCSLIM_CC extends CSLIM {
 
         if (knn > 0) {
             // find the nearest neighbors for each item based on item similarity
-            SymmMatrix itemCorrs = buildCorrs(false); // this is based on transformed 2D rating matrix, this.train
+            SymmMatrix2 itemCorrs = buildCorrs(false); // this is based on transformed 2D rating matrix, this.train
             itemNNs = HashMultimap.create();
 
             for (int j = 0; j < numItems; j++) {
